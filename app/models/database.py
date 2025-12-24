@@ -1,20 +1,21 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import os
+from dotenv import load_dotenv
 
 # ============================================================================
 # DATABASE CONFIGURATION
 # ============================================================================
 
+load_dotenv()
 # Database URL - Change this based on your database choice
 # For SQLite (easiest for local testing):
 # DATABASE_URL = "sqlite:///./test.db"
 
 # For PostgreSQL:
-DATABASE_URL = "postgresql://neondb_owner:npg_pCUvIczyK2L9@ep-cool-frost-af45s6ic-pooler.c-2.us-west-2.aws.neon.tech/exodus_db?sslmode=require&channel_binding=require"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# For MySQL:
-# DATABASE_URL = "mysql+pymysql://username:password@localhost/dbname"
 
 # ============================================================================
 # DATABASE ENGINE & SESSION SETUP
