@@ -16,6 +16,8 @@ load_dotenv()
 # For PostgreSQL:
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+print("DATABASE_URL seen by app:", repr(DATABASE_URL))
+
 
 # ============================================================================
 # DATABASE ENGINE & SESSION SETUP
