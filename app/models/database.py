@@ -27,7 +27,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 # check_same_thread=False is needed for SQLite only (allows multiple threads)
 engine = create_engine(
     DATABASE_URL, 
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    connect_args={"sslmode": "require"},  # SSL required by Neon
+    pool_pre_ping=True
 )
 
 # SessionLocal is a factory for creating database sessions

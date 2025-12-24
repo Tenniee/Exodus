@@ -33,7 +33,13 @@ def hash_password(password: str) -> str:
     Returns:
         Hashed password string
     """
+    if not isinstance(password, str):
+        password = password.decode("utf-8")  # convert bytes → str
+    password = password.strip()  # remove whitespace
+    # Optional: truncate at 72 bytes for safety
+    password = password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
     return pwd_context.hash(password)
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
@@ -46,6 +52,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         True if passwords match, False otherwise
     """
+    if not isinstance(plain_password, str):
+        plain_password = plain_password.decode("utf-8")
+    plain_password = plain_password.strip()
+    plain_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
     return pwd_context.verify(plain_password, hashed_password)
 
 # ============================================================================
