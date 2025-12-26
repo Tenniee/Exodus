@@ -74,6 +74,11 @@ def init_db():
     """
     # Import all models here so SQLAlchemy knows about them
     from app.models.user import User  # noqa
+    from app.models.newsletter import NewsletterSubscription  # noqa
+    from app.models.artist import Artist  # noqa
+    from app.models.song import Song  # noqa
+    from app.models.video import Video  # noqa
+    from app.models.artist_request import ArtistRequest  # noqa
     
     # Create all tables
     Base.metadata.create_all(bind=engine)

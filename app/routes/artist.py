@@ -14,6 +14,16 @@ from app.core.dependencies import get_current_user
 from app.core.cloudinary_config import upload_artist_banner, upload_artist_image
 import json
 
+from app.schemas.artist import ArtistListResponse, ArtistDetailResponse, ArtistWithSongsResponse, PaginationMeta
+from app.models.song import Song
+from app.models.video import Video
+from sqlalchemy import or_
+import math
+
+from typing import List
+from app.schemas.song import SongResponse
+from app.schemas.video import VideoResponse
+
 # ============================================================================
 # ROUTER SETUP
 # ============================================================================
@@ -376,3 +386,448 @@ async def edit_artist(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update artist: {str(e)}"
         )
+
+
+
+
+@router.get("/", response_model=ArtistListResponse)
+def get_all_artists(
+    page: int = 1,
+    per_page: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all artists with pagination
+    
+    Returns paginated list of artists with their songs
+    Songs are matched by artist_id (if linked) OR by artist_name (string match)
+    
+    Args:
+        page: Page number (default: 1)
+        per_page: Items per page (default: 50)
+        db: Database session
+    
+    Returns:
+        Paginated artist list with metadata
+        
+    Response structure:
+        {
+            "data": [
+                {
+                    "id": 1,
+                    "artist_name": "Drake",
+                    "banner_image_url": "...",
+                    "image_url": "...",
+                    "genres": ["Hip Hop", "R&B"],
+                    "spotify_link": "...",
+                    ...
+                    "songs": [
+                        {
+                            "id": 1,
+                            "song_name": "God's Plan",
+                            "artist_name": "Drake",
+                            "artist_id": 1,
+                            "cover_art_url": "...",
+                            ...
+                        }
+                    ]
+                }
+            ],
+            "meta": {
+                "total": 100,
+                "page": 1,
+                "per_page": 50,
+                "total_pages": 2
+            }
+        }
+    """
+    
+    # ========================================================================
+    # STEP 1: Get total count for pagination
+    # ========================================================================
+    
+    total_artists = db.query(Artist).count()
+    total_pages = math.ceil(total_artists / per_page)
+    
+    # Validate page number
+    if page < 1:
+        page = 1
+    
+    # ========================================================================
+    # STEP 2: Get paginated artists
+    # ========================================================================
+    
+    offset = (page - 1) * per_page
+    artists = db.query(Artist).offset(offset).limit(per_page).all()
+    
+    # ========================================================================
+    # STEP 3: For each artist, fetch their songs
+    # ========================================================================
+    
+    artists_with_songs = []
+    
+    for artist in artists:
+        # Find songs that are linked to this artist by artist_id
+        # OR match by artist_name (for old data or features)
+        songs = db.query(Song).filter(
+            or_(
+                Song.artist_id == artist.id,
+                Song.artist_name == artist.artist_name
+            )
+        ).all()
+        
+        # Build artist response with songs
+        artist_data = ArtistWithSongsResponse(
+            id=artist.id,
+            artist_name=artist.artist_name,
+            banner_image_url=artist.banner_image_url,
+            image_url=artist.image_url,
+            genres=artist.genres.split(","),
+            spotify_link=artist.spotify_link,
+            apple_music_link=artist.apple_music_link,
+            youtube_link=artist.youtube_link,
+            youtube_music_link=artist.youtube_music_link,
+            instagram_link=artist.instagram_link,
+            x_link=artist.x_link,
+            tiktok_link=artist.tiktok_link,
+            created_at=artist.created_at,
+            songs=songs
+        )
+        
+        artists_with_songs.append(artist_data)
+    
+    # ========================================================================
+    # STEP 4: Build response with pagination metadata
+    # ========================================================================
+    
+    return ArtistListResponse(
+        data=artists_with_songs,
+        meta=PaginationMeta(
+            total=total_artists,
+            page=page,
+            per_page=per_page,
+            total_pages=total_pages
+        )
+    )
+
+
+# ============================================================================
+# FETCH SINGLE ARTIST WITH ALL DETAILS
+# ============================================================================
+
+@router.get("/{artist_id}", response_model=ArtistDetailResponse)
+def get_artist_by_id(
+    artist_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a single artist with all their songs and videos
+    
+    Returns complete artist profile including:
+    - Artist information (banner, image, genres, social links)
+    - All songs (matched by artist_id OR artist_name)
+    - All videos (matched by artist_id OR artist_name)
+    
+    Args:
+        artist_id: ID of the artist
+        db: Database session
+    
+    Returns:
+        Complete artist profile with songs and videos
+    
+    Raises:
+        HTTPException 404 if artist not found
+        
+    Response structure:
+        {
+            "id": 1,
+            "artist_name": "Drake",
+            "banner_image_url": "...",
+            "image_url": "...",
+            "genres": ["Hip Hop", "R&B"],
+            "spotify_link": "...",
+            ...
+            "songs": [...],
+            "videos": [...]
+        }
+    """
+    
+    # ========================================================================
+    # STEP 1: Find the artist
+    # ========================================================================
+    
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    
+    if not artist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Artist with ID {artist_id} not found"
+        )
+    
+    # ========================================================================
+    # STEP 2: Fetch all songs by this artist
+    # ========================================================================
+    
+    # Find songs that are linked to this artist by artist_id
+    # OR match by artist_name (for old data or features)
+    songs = db.query(Song).filter(
+        or_(
+            Song.artist_id == artist.id,
+            Song.artist_name == artist.artist_name
+        )
+    ).all()
+    
+    # ========================================================================
+    # STEP 3: Fetch all videos by this artist
+    # ========================================================================
+    
+    # Find videos that are linked to this artist by artist_id
+    # OR match by artist_name (for old data or features)
+    videos = db.query(Video).filter(
+        or_(
+            Video.artist_id == artist.id,
+            Video.artist_name == artist.artist_name
+        )
+    ).all()
+    
+    # ========================================================================
+    # STEP 4: Build complete artist response
+    # ========================================================================
+    
+    return ArtistDetailResponse(
+        id=artist.id,
+        artist_name=artist.artist_name,
+        banner_image_url=artist.banner_image_url,
+        image_url=artist.image_url,
+        genres=artist.genres.split(","),
+        spotify_link=artist.spotify_link,
+        apple_music_link=artist.apple_music_link,
+        youtube_link=artist.youtube_link,
+        youtube_music_link=artist.youtube_music_link,
+        instagram_link=artist.instagram_link,
+        x_link=artist.x_link,
+        tiktok_link=artist.tiktok_link,
+        created_at=artist.created_at,
+        songs=songs,
+        videos=videos
+    )
+
+
+
+@router.delete("/admin-delete-artist/{artist_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_artist(
+    artist_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete an artist and all related content
+    
+    This endpoint requires authentication (JWT token)
+    
+    Deletes:
+    - Artist record from database
+    - Artist banner and profile images from Cloudinary
+    - All songs linked to this artist (by artist_id)
+    - All song cover arts from Cloudinary
+    - All videos linked to this artist (by artist_id)
+    
+    Does NOT delete:
+    - Songs/videos that only match by artist_name string (no artist_id link)
+    
+    Process:
+    1. Find the artist
+    2. Find all songs with this artist_id
+    3. Delete all song cover arts from Cloudinary
+    4. Delete all songs from database
+    5. Find all videos with this artist_id
+    6. Delete all videos from database
+    7. Delete artist images from Cloudinary
+    8. Delete artist from database
+    
+    Args:
+        artist_id: ID of the artist to delete
+        db: Database session
+        current_user: Authenticated user (requires auth)
+    
+    Returns:
+        204 No Content on success
+    
+    Raises:
+        HTTPException 404 if artist not found
+        HTTPException 500 if deletion fails
+    """
+    
+    from models.song import Song
+    from models.video import Video
+    from core.cloudinary_config import delete_cloudinary_image
+    
+    # ========================================================================
+    # STEP 1: Find the artist
+    # ========================================================================
+    
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    
+    if not artist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Artist with ID {artist_id} not found"
+        )
+    
+    # ========================================================================
+    # STEP 2: Delete all songs linked to this artist
+    # ========================================================================
+    
+    # Find all songs with this artist_id (not just matching name)
+    songs = db.query(Song).filter(Song.artist_id == artist_id).all()
+    
+    # Delete all song cover arts from Cloudinary
+    for song in songs:
+        delete_cloudinary_image(song.cover_art_url)
+    
+    # Delete all songs from database
+    db.query(Song).filter(Song.artist_id == artist_id).delete()
+    
+    # ========================================================================
+    # STEP 3: Delete all videos linked to this artist
+    # ========================================================================
+    
+    # Find all videos with this artist_id (not just matching name)
+    # No need to delete thumbnails as they're YouTube URLs, not uploaded
+    db.query(Video).filter(Video.artist_id == artist_id).delete()
+    
+    # ========================================================================
+    # STEP 4: Delete artist images from Cloudinary
+    # ========================================================================
+    
+    # Delete banner image
+    delete_cloudinary_image(artist.banner_image_url)
+    
+    # Delete profile image
+    delete_cloudinary_image(artist.image_url)
+    
+    # ========================================================================
+    # STEP 5: Delete artist from database
+    # ========================================================================
+    
+    try:
+        db.delete(artist)
+        db.commit()
+        
+        # Return 204 No Content (no response body)
+        return None
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete artist: {str(e)}"
+        )
+
+
+@router.get("/{artist_id}/songs", response_model=List[SongResponse])
+def get_artist_songs(
+    artist_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all songs by a specific artist
+    
+    Returns all songs that are either:
+    - Linked to this artist by artist_id
+    - Match this artist's name by artist_name string
+    
+    Args:
+        artist_id: ID of the artist
+        db: Database session
+    
+    Returns:
+        List of all songs by this artist
+    
+    Raises:
+        HTTPException 404 if artist not found
+    """
+    
+    from models.song import Song
+    from sqlalchemy import or_
+    
+    # ========================================================================
+    # STEP 1: Verify artist exists
+    # ========================================================================
+    
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    
+    if not artist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Artist with ID {artist_id} not found"
+        )
+    
+    # ========================================================================
+    # STEP 2: Fetch all songs
+    # ========================================================================
+    
+    # Find songs that are linked to this artist by artist_id
+    # OR match by artist_name (for old data or features)
+    songs = db.query(Song).filter(
+        or_(
+            Song.artist_id == artist.id,
+            Song.artist_name == artist.artist_name
+        )
+    ).all()
+    
+    return songs
+
+
+@router.get("/{artist_id}/videos", response_model=List[VideoResponse])
+def get_artist_videos(
+    artist_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all videos by a specific artist
+    
+    Returns all videos that are either:
+    - Linked to this artist by artist_id
+    - Match this artist's name by artist_name string
+    
+    Args:
+        artist_id: ID of the artist
+        db: Database session
+    
+    Returns:
+        List of all videos by this artist
+    
+    Raises:
+        HTTPException 404 if artist not found
+    """
+    
+    from models.video import Video
+    from sqlalchemy import or_
+    
+    # ========================================================================
+    # STEP 1: Verify artist exists
+    # ========================================================================
+    
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    
+    if not artist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Artist with ID {artist_id} not found"
+        )
+    
+    # ========================================================================
+    # STEP 2: Fetch all videos
+    # ========================================================================
+    
+    # Find videos that are linked to this artist by artist_id
+    # OR match by artist_name (for old data or features)
+    videos = db.query(Video).filter(
+        or_(
+            Video.artist_id == artist.id,
+            Video.artist_name == artist.artist_name
+        )
+    ).all()
+    
+    return videos

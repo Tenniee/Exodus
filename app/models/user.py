@@ -28,6 +28,9 @@ class User(Base):
     
     # Hashed password (we NEVER store plain text passwords!)
     hashed_password = Column(String(255), nullable=False)
+    
+    # Profile picture URL from Cloudinary - optional
+    profile_picture_url = Column(String(500), nullable=True)
 
 
 # ============================================================================

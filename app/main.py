@@ -5,10 +5,12 @@ from app.routes.auth import router as auth_router
 from app.routes.newsletter import router as newsletter_router
 from app.routes.artist import router as artist_router
 from app.routes.song import router as song_router
+from app.routes.video import router as video_router
+from app.routes.artist_request import router as artist_request_router
 
 app = FastAPI(
-    title="User Authentication API",
-    description="A secure authentication API with signup, login, and JWT tokens",
+    title="Exodus record Label API",
+    description="Exodus Record Label User Authentication and Management API",
     version="1.0.0"
 )
 
@@ -46,6 +48,8 @@ app.include_router(auth_router)
 app.include_router(newsletter_router)
 app.include_router(artist_router)
 app.include_router(song_router)
+app.include_router(video_router)
+app.include_router(artist_request_router)
 
 
 

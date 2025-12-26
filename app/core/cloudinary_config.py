@@ -7,7 +7,7 @@ import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile, HTTPException, status
 import os
-from typing import Literal
+from typing import Literal, Optional
 
 # ============================================================================
 # CLOUDINARY CONFIGURATION
@@ -263,3 +263,117 @@ def upload_song_cover_art(file: UploadFile, song_name: str, artist_name: str) ->
 # ============================================================================
 # ============================================================================
 # ============================================================================
+
+# ============================================================================
+# YOUTUBE THUMBNAIL UTILITY
+# ============================================================================
+
+def extract_youtube_video_id(url: str) -> Optional[str]:
+    """
+    Extracts the video ID from a YouTube URL
+    
+    Supports formats:
+    - https://www.youtube.com/watch?v=VIDEO_ID
+    - https://youtu.be/VIDEO_ID
+    - https://www.youtube.com/embed/VIDEO_ID
+    - https://m.youtube.com/watch?v=VIDEO_ID
+    
+    Args:
+        url: YouTube video URL
+    
+    Returns:
+        Video ID if URL is valid YouTube, None otherwise
+    """
+    import re
+    from typing import Optional
+    
+    # Pattern to match various YouTube URL formats
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
+        r'youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    
+    return None
+
+def get_youtube_thumbnail_url(video_url: str) -> Optional[str]:
+    """
+    Generates YouTube thumbnail URL from video URL
+    
+    Args:
+        video_url: YouTube video URL
+    
+    Returns:
+        Thumbnail URL if it's a valid YouTube video, None otherwise
+    """
+    video_id = extract_youtube_video_id(video_url)
+    
+    if video_id:
+        # YouTube thumbnail URL pattern
+        # maxresdefault.jpg gives the highest quality (1920x1080)
+        # Falls back to hqdefault.jpg (480x360) if maxres not available
+        return f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+    
+    return None
+    
+    # Look up the user in the database
+    # db.query(User) starts a query on the User table
+    # .filter() adds a WHERE clause (WHERE id = user_id)
+    # .first() returns the first result or None
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    
+    return user
+
+
+def upload_user_profile_picture(file: UploadFile, user_id: int) -> str:
+    """
+    Uploads a user profile picture to Cloudinary with auto-cropping to square format
+    
+    Profile picture dimensions: 400x400 (1:1 aspect ratio - square)
+    
+    Args:
+        file: The uploaded profile picture image file
+        user_id: ID of the user (used in filename)
+    
+    Returns:
+        Cloudinary URL of the uploaded profile picture
+    
+    Raises:
+        HTTPException if upload fails or file format is invalid
+    """
+    # Validate the file format
+    validate_image_file(file)
+    
+    try:
+        # Upload to Cloudinary with square crop transformation
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder="users/profiles",
+            public_id=f"user_{user_id}_profile",
+            transformation=[
+                {
+                    "width": 400,
+                    "height": 400,
+                    "crop": "fill",
+                    "gravity": "auto"  # AI-powered smart cropping
+                }
+            ],
+            overwrite=True  # Replace if image with same name exists
+        )
+        
+        return result["secure_url"]
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload profile picture: {str(e)}"
+        )

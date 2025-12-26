@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
 
 # ============================================================================
 # REQUEST SCHEMAS
@@ -8,6 +9,7 @@ class UserSignup(BaseModel):
     """
     Schema for signup request
     Pydantic validates that incoming data matches this structure
+    Note: profile_picture is uploaded as file separately
     """
     first_name: str = Field(..., min_length=1, max_length=100)  # ... means required
     last_name: str = Field(..., min_length=1, max_length=100)
@@ -25,6 +27,15 @@ class UserLogin(BaseModel):
     """
     email: EmailStr
     password: str
+
+class UserUpdate(BaseModel):
+    """
+    Schema for updating user profile
+    All fields optional except password (password requires separate endpoint)
+    """
+    first_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    email: Optional[EmailStr] = None
 
 # ============================================================================
 # RESPONSE SCHEMAS
@@ -47,6 +58,7 @@ class UserResponse(BaseModel):
     first_name: str
     last_name: str
     email: str
+    profile_picture_url: Optional[str]  # Can be null if not uploaded
     
     class Config:
         from_attributes = True
