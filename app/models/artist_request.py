@@ -41,7 +41,7 @@ class ArtistRequest(Base):
     prod_and_engineering = Column(Boolean, default=False, nullable=False)
     marketing_and_promotions = Column(Boolean, default=False, nullable=False)
     
-    # Status of the request - "pending", "approved", or "rejected"
+    # Status of the request - "pending", "approved", "rejected", or "listed"
     status = Column(String(50), default="pending", nullable=False, index=True)
     
     # Timestamp when the request was created

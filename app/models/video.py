@@ -29,16 +29,15 @@ class Video(Base):
     # Video link - YouTube or other platform URL - required
     video_link = Column(String(500), nullable=False)
     
-    # Artist name - stored as string (can be features)
+    # Artist name - stored as string for display purposes
     artist_name = Column(String(255), nullable=False, index=True)
     
-    # Artist ID - optional foreign key to artists table
-    # If provided, links to an artist in the database
-    # If null, it's a feature or artist not in our system
-    artist_id = Column(Integer, ForeignKey('artists.id'), nullable=True, index=True)
+    # Artist ID - NOW REQUIRED - links to artists table
+    artist_id = Column(Integer, ForeignKey('artists.id', ondelete='CASCADE'), nullable=False, index=True)
     
     # Thumbnail URL - auto-generated for YouTube videos, null for other platforms
     thumbnail_url = Column(String(500), nullable=True)
     
     # Timestamp when the video was added
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+

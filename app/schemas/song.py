@@ -53,3 +53,21 @@ class SongResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+
+class SongWithOrderResponse(BaseModel):
+    """
+    Schema for song data with display order (used in artist profile)
+    """
+    id: int
+    song_name: str
+    artist_name: str
+    artist_id: int
+    cover_art_url: str
+    linktree: str
+    created_at: datetime
+    display_order: Optional[int]  # Will be None if no custom order set
+    
+    class Config:
+        from_attributes = True

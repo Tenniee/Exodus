@@ -50,3 +50,19 @@ class VideoResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+class VideoWithOrderResponse(BaseModel):
+    """
+    Schema for video data with display order (used in artist profile)
+    """
+    id: int
+    video_name: str
+    video_link: str
+    artist_name: str
+    artist_id: int
+    thumbnail_url: Optional[str]
+    created_at: datetime
+    display_order: Optional[int]  # Will be None if no custom order set
+    
+    class Config:
+        from_attributes = True

@@ -16,7 +16,7 @@ from app.models.database import Base
 class Song(Base):
     """
     Song model - represents the 'songs' table in the database
-    Stores song information including cover art and artist name
+    Stores song information including cover art and artist link
     """
     __tablename__ = "songs"
     
@@ -26,13 +26,11 @@ class Song(Base):
     # Song name - required field
     song_name = Column(String(255), nullable=False, index=True)
     
-    # Artist name - stored as string (can be features, not necessarily in artists table)
+    # Artist name - stored as string for display purposes
     artist_name = Column(String(255), nullable=False, index=True)
     
-    # Artist ID - optional foreign key to artists table
-    # If provided, links to an artist in the database
-    # If null, it's a feature or artist not in our system
-    artist_id = Column(Integer, ForeignKey('artists.id'), nullable=True, index=True)
+    # Artist ID - NOW REQUIRED - links to artists table
+    artist_id = Column(Integer, ForeignKey('artists.id', ondelete='CASCADE'), nullable=False, index=True)
     
     # Cover art URL from Cloudinary - required
     cover_art_url = Column(String(500), nullable=False)

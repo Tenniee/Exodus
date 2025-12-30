@@ -79,6 +79,9 @@ def init_db():
     from app.models.song import Song  # noqa
     from app.models.video import Video  # noqa
     from app.models.artist_request import ArtistRequest  # noqa
-    
+    from app.models.artist_song_order import ArtistSongOrder  # noqa
+    from app.models.artist_video_order import ArtistVideoOrder  # noqa
+    from app.models.featured_music import FeaturedMusic  # noqa
+
     # Create all tables
     Base.metadata.create_all(bind=engine)

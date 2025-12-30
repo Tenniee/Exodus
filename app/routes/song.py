@@ -13,6 +13,7 @@ from app.models.song import Song
 from app.schemas.song import SongResponse, SongCreate
 from app.core.dependencies import get_current_user
 from app.core.cloudinary_config import upload_song_cover_art, delete_cloudinary_image
+from sqlalchemy import func
 
 # ============================================================================
 # ROUTER SETUP
@@ -74,7 +75,7 @@ async def add_song(
     """
     
     # Import Artist model for validation
-    from models.artist import Artist
+    from app.models.artist import Artist
     
     # ========================================================================
     # STEP 1: Parse and validate songs JSON
@@ -90,10 +91,15 @@ async def add_song(
             if not isinstance(song, dict):
                 raise ValueError(f"Song at index {idx} must be an object")
             
-            required_fields = ["song_name", "artist_name", "linktree"]
+            # Check required fields including artist_id
+            required_fields = ["song_name", "artist_name", "linktree", "artist_id"]
             for field in required_fields:
                 if field not in song or not song[field]:
                     raise ValueError(f"Song at index {idx} missing required field: {field}")
+            
+            # Validate artist_id is a positive integer
+            if not isinstance(song["artist_id"], int) or song["artist_id"] <= 0:
+                raise ValueError(f"Song at index {idx}: artist_id must be a positive integer")
         
     except (json.JSONDecodeError, ValueError) as e:
         raise HTTPException(
@@ -112,20 +118,19 @@ async def add_song(
         )
     
     # ========================================================================
-    # STEP 3: Verify artist_id exists if provided
+    # STEP 3: Verify all artist_id values exist
     # ========================================================================
     
     for idx, song_data in enumerate(songs_list):
-        artist_id = song_data.get("artist_id")
+        artist_id = song_data["artist_id"]
         
-        if artist_id is not None:
-            # Verify the artist exists in the database
-            artist = db.query(Artist).filter(Artist.id == artist_id).first()
-            if not artist:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Song at index {idx}: Artist with ID {artist_id} not found"
-                )
+        # Verify the artist exists in the database
+        artist = db.query(Artist).filter(Artist.id == artist_id).first()
+        if not artist:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Song at index {idx}: Artist with ID {artist_id} not found"
+            )
     
     # ========================================================================
     # STEP 4: Upload all cover arts to Cloudinary
@@ -162,23 +167,50 @@ async def add_song(
             new_song = Song(
                 song_name=song_data["song_name"].strip(),
                 artist_name=song_data["artist_name"].strip(),
-                artist_id=song_data.get("artist_id"),  # Can be None
+                artist_id=song_data["artist_id"],  # Now required
                 cover_art_url=cover_url,
                 linktree=song_data["linktree"].strip()
             )
             db.add(new_song)
             created_songs.append(new_song)
         
+        # Commit to get song IDs
         db.commit()
         
+        # Refresh all songs to get their IDs
         for song in created_songs:
             db.refresh(song)
+        
+        # ====================================================================
+        # STEP 6: Auto-create order entries for each song
+        # ====================================================================
+        
+        for song in created_songs:
+            # Get the current max position for this artist
+            max_position = db.query(func.max(ArtistSongOrder.display_order)).filter(
+                ArtistSongOrder.artist_id == song.artist_id
+            ).scalar()
+            
+            # If no songs exist yet, start at 1, otherwise increment
+            next_position = 1 if max_position is None else max_position + 1
+            
+            # Create order entry
+            order_entry = ArtistSongOrder(
+                artist_id=song.artist_id,
+                song_id=song.id,
+                display_order=next_position
+            )
+            db.add(order_entry)
+        
+        # Commit order entries
+        db.commit()
         
         return created_songs
         
     except Exception as e:
         db.rollback()
         
+        # Delete all uploaded cover arts from Cloudinary
         for url in uploaded_cover_urls:
             delete_cloudinary_image(url)
         
@@ -186,6 +218,7 @@ async def add_song(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create songs: {str(e)}. All changes have been rolled back."
         )
+
 
 
 

@@ -92,10 +92,15 @@ async def add_videos(
             if not isinstance(video, dict):
                 raise ValueError(f"Video at index {idx} must be an object")
             
-            required_fields = ["video_name", "video_link", "artist_name"]
+            # Check required fields including artist_id
+            required_fields = ["video_name", "video_link", "artist_name", "artist_id"]
             for field in required_fields:
                 if field not in video or not video[field]:
                     raise ValueError(f"Video at index {idx} missing required field: {field}")
+            
+            # Validate artist_id is a positive integer
+            if not isinstance(video["artist_id"], int) or video["artist_id"] <= 0:
+                raise ValueError(f"Video at index {idx}: artist_id must be a positive integer")
         
     except (json.JSONDecodeError, ValueError) as e:
         raise HTTPException(
@@ -104,20 +109,19 @@ async def add_videos(
         )
     
     # ========================================================================
-    # STEP 2: Verify artist_id exists if provided
+    # STEP 2: Verify all artist_id values exist
     # ========================================================================
     
     for idx, video_data in enumerate(videos_list):
-        artist_id = video_data.get("artist_id")
+        artist_id = video_data["artist_id"]
         
-        if artist_id is not None:
-            # Verify the artist exists in the database
-            artist = db.query(Artist).filter(Artist.id == artist_id).first()
-            if not artist:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Video at index {idx}: Artist with ID {artist_id} not found"
-                )
+        # Verify the artist exists in the database
+        artist = db.query(Artist).filter(Artist.id == artist_id).first()
+        if not artist:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Video at index {idx}: Artist with ID {artist_id} not found"
+            )
     
     # ========================================================================
     # STEP 3: Extract YouTube thumbnails for each video
@@ -132,7 +136,7 @@ async def add_videos(
             "video_name": video_data["video_name"].strip(),
             "video_link": video_link,
             "artist_name": video_data["artist_name"].strip(),
-            "artist_id": video_data.get("artist_id"),  # Can be None
+            "artist_id": video_data["artist_id"],  # Now required
             "thumbnail_url": thumbnail_url
         })
     
@@ -148,16 +152,42 @@ async def add_videos(
                 video_name=video_data["video_name"],
                 video_link=video_data["video_link"],
                 artist_name=video_data["artist_name"],
-                artist_id=video_data["artist_id"],  # Can be None
+                artist_id=video_data["artist_id"],  # Now required
                 thumbnail_url=video_data["thumbnail_url"]
             )
             db.add(new_video)
             created_videos.append(new_video)
         
+        # Commit to get video IDs
         db.commit()
         
+        # Refresh all videos to get their IDs
         for video in created_videos:
             db.refresh(video)
+        
+        # ====================================================================
+        # STEP 5: Auto-create order entries for each video
+        # ====================================================================
+        
+        for video in created_videos:
+            # Get the current max position for this artist
+            max_position = db.query(func.max(ArtistVideoOrder.display_order)).filter(
+                ArtistVideoOrder.artist_id == video.artist_id
+            ).scalar()
+            
+            # If no videos exist yet, start at 1, otherwise increment
+            next_position = 1 if max_position is None else max_position + 1
+            
+            # Create order entry
+            order_entry = ArtistVideoOrder(
+                artist_id=video.artist_id,
+                video_id=video.id,
+                display_order=next_position
+            )
+            db.add(order_entry)
+        
+        # Commit order entries
+        db.commit()
         
         return created_videos
         

@@ -6,6 +6,7 @@ Pydantic schemas for artist request-related requests and responses
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
+from pydantic import validator
 
 # ============================================================================
 # REQUEST SCHEMAS
@@ -61,3 +62,18 @@ class ArtistRequestResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+        
+class ArtistRequestUpdateStatus(BaseModel):
+    """
+    Schema for updating an artist request status
+    """
+    status: str = Field(..., min_length=1, max_length=50)
+    
+    # Optional: Add validation to ensure only valid statuses
+    @validator('status')
+    def validate_status(cls, v):
+        allowed_statuses = ['pending', 'approved', 'rejected', 'listed']
+        if v.lower() not in allowed_statuses:
+            raise ValueError(f'Status must be one of: {", ".join(allowed_statuses)}')
+        return v.lower()

@@ -5,8 +5,8 @@ Pydantic schemas for artist-related requests and responses
 from pydantic import BaseModel, HttpUrl, Field
 from typing import Optional, List
 from datetime import datetime
-from app.schemas.song import SongResponse
-from app.schemas.video import VideoResponse
+from app.schemas.song import SongResponse, SongWithOrderResponse
+from app.schemas.video import VideoResponse, VideoWithOrderResponse
 
 # ============================================================================
 # REQUEST SCHEMAS
@@ -126,14 +126,24 @@ class ArtistDetailResponse(BaseModel):
     
     created_at: datetime
     
-    # All songs by this artist
-    songs: List[SongResponse]
+    # All songs by this artist (with ordering)
+    songs: List[SongWithOrderResponse]
     
-    # All videos by this artist
-    videos: List[VideoResponse]
+    # All videos by this artist (with ordering)
+    videos: List[VideoWithOrderResponse]
     
     class Config:
         from_attributes = True
+
+
+class ItemOrder(BaseModel):
+    """Schema for individual item order"""
+    id: int  # song_id or video_id
+    position: int
+
+class ReorderRequest(BaseModel):
+    """Schema for reordering items"""
+    items: List[ItemOrder]
 
 
 # ============================================================================

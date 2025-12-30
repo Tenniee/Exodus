@@ -10,7 +10,7 @@ from typing import List
 from app.models.database import get_db
 from app.models.user import User
 from app.models.artist_request import ArtistRequest
-from app.schemas.artist_request import ArtistRequestSubmit, ArtistRequestResponse
+from app.schemas.artist_request import ArtistRequestSubmit, ArtistRequestResponse, ArtistRequestUpdateStatus
 from app.core.dependencies import get_current_user
 from typing import Optional
 
@@ -115,11 +115,12 @@ def get_all_artist_requests(
     
     Optionally filter by status using query parameter:
     - /admin-list?status_filter=pending
+    - /admin-list?status_filter=listed
     - /admin-list?status_filter=approved
     - /admin-list?status_filter=rejected
     
     Args:
-        status_filter: Optional status to filter by ("pending", "approved", "rejected")
+        status_filter: Optional status to filter by ("pending", "approved", "rejected", "listed")
         db: Database session
         current_user: Authenticated user (from JWT token)
     
@@ -183,3 +184,66 @@ def remove_artist_request(
     db.commit()
     
     return None
+
+
+@router.patch("/admin-update-status/{request_id}", response_model=ArtistRequestResponse)
+def update_artist_request_status(
+    request_id: int,
+    status_update: ArtistRequestUpdateStatus,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # Requires authentication
+):
+    """
+    Update the status of an artist request (REQUIRES authentication)
+    
+    This endpoint is for admins to change the status of artist requests
+    
+    Valid statuses:
+    - "pending" - Initial status, awaiting review
+    - "approved" - Request has been approved
+    - "rejected" - Request has been rejected
+    - "listed" - Artist has been added to the platform
+    
+    Any status can be changed to any other status (no restrictions)
+    
+    Args:
+        request_id: ID of the artist request to update
+        status_update: New status data containing the status field
+        db: Database session
+        current_user: Authenticated user (from JWT token)
+    
+    Returns:
+        Updated artist request with new status
+    
+    Raises:
+        HTTPException 404 if request not found
+        HTTPException 400 if status is invalid
+    """
+    
+    # Find the artist request
+    artist_request = db.query(ArtistRequest).filter(
+        ArtistRequest.id == request_id
+    ).first()
+    
+    if not artist_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Artist request with ID {request_id} not found"
+        )
+    
+    # Update the status
+    artist_request.status = status_update.status
+    
+    # Save changes to database
+    try:
+        db.commit()
+        db.refresh(artist_request)
+        
+        return artist_request
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update status: {str(e)}"
+        )

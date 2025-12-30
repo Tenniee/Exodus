@@ -14,15 +14,16 @@ from app.core.dependencies import get_current_user
 from app.core.cloudinary_config import upload_artist_banner, upload_artist_image
 import json
 
-from app.schemas.artist import ArtistListResponse, ArtistDetailResponse, ArtistWithSongsResponse, PaginationMeta
+from app.schemas.artist import ArtistListResponse, ArtistDetailResponse, ArtistWithSongsResponse, PaginationMeta, ReorderRequest, ItemOrder, ItemOrder
 from app.models.song import Song
 from app.models.video import Video
 from sqlalchemy import or_
 import math
 
 from typing import List
-from app.schemas.song import SongResponse
-from app.schemas.video import VideoResponse
+from app.schemas.song import SongResponse, SongWithOrderResponse
+from app.schemas.video import VideoResponse, VideoWithOrderResponse
+
 
 # ============================================================================
 # ROUTER SETUP
@@ -521,36 +522,28 @@ def get_artist_by_id(
     db: Session = Depends(get_db)
 ):
     """
-    Get a single artist with all their songs and videos
+    Get a single artist with all their songs and videos (ORDERED)
     
     Returns complete artist profile including:
     - Artist information (banner, image, genres, social links)
-    - All songs (matched by artist_id OR artist_name)
-    - All videos (matched by artist_id OR artist_name)
+    - All songs linked to this artist (ordered by display_order)
+    - All videos linked to this artist (ordered by display_order)
+    
+    Songs and videos are returned in their custom order as set by admin
     
     Args:
         artist_id: ID of the artist
         db: Database session
     
     Returns:
-        Complete artist profile with songs and videos
+        Complete artist profile with ordered songs and videos
     
     Raises:
         HTTPException 404 if artist not found
-        
-    Response structure:
-        {
-            "id": 1,
-            "artist_name": "Drake",
-            "banner_image_url": "...",
-            "image_url": "...",
-            "genres": ["Hip Hop", "R&B"],
-            "spotify_link": "...",
-            ...
-            "songs": [...],
-            "videos": [...]
-        }
     """
+    
+    from models.artist_song_order import ArtistSongOrder
+    from models.artist_video_order import ArtistVideoOrder
     
     # ========================================================================
     # STEP 1: Find the artist
@@ -565,30 +558,70 @@ def get_artist_by_id(
         )
     
     # ========================================================================
-    # STEP 2: Fetch all songs by this artist
+    # STEP 2: Fetch all songs by this artist WITH ordering
     # ========================================================================
     
-    # Find songs that are linked to this artist by artist_id
-    # OR match by artist_name (for old data or features)
-    songs = db.query(Song).filter(
-        or_(
-            Song.artist_id == artist.id,
-            Song.artist_name == artist.artist_name
-        )
+    # Join Song with ArtistSongOrder to get display_order
+    # Only fetch songs linked to this artist by artist_id
+    songs_query = db.query(
+        Song,
+        ArtistSongOrder.display_order
+    ).outerjoin(
+        ArtistSongOrder,
+        (Song.id == ArtistSongOrder.song_id) & (ArtistSongOrder.artist_id == artist_id)
+    ).filter(
+        Song.artist_id == artist_id
+    ).order_by(
+        ArtistSongOrder.display_order.asc()
     ).all()
     
+    # Build song response objects with display_order
+    songs = []
+    for song, display_order in songs_query:
+        song_data = SongWithOrderResponse(
+            id=song.id,
+            song_name=song.song_name,
+            artist_name=song.artist_name,
+            artist_id=song.artist_id,
+            cover_art_url=song.cover_art_url,
+            linktree=song.linktree,
+            created_at=song.created_at,
+            display_order=display_order
+        )
+        songs.append(song_data)
+    
     # ========================================================================
-    # STEP 3: Fetch all videos by this artist
+    # STEP 3: Fetch all videos by this artist WITH ordering
     # ========================================================================
     
-    # Find videos that are linked to this artist by artist_id
-    # OR match by artist_name (for old data or features)
-    videos = db.query(Video).filter(
-        or_(
-            Video.artist_id == artist.id,
-            Video.artist_name == artist.artist_name
-        )
+    # Join Video with ArtistVideoOrder to get display_order
+    # Only fetch videos linked to this artist by artist_id
+    videos_query = db.query(
+        Video,
+        ArtistVideoOrder.display_order
+    ).outerjoin(
+        ArtistVideoOrder,
+        (Video.id == ArtistVideoOrder.video_id) & (ArtistVideoOrder.artist_id == artist_id)
+    ).filter(
+        Video.artist_id == artist_id
+    ).order_by(
+        ArtistVideoOrder.display_order.asc()
     ).all()
+    
+    # Build video response objects with display_order
+    videos = []
+    for video, display_order in videos_query:
+        video_data = VideoWithOrderResponse(
+            id=video.id,
+            video_name=video.video_name,
+            video_link=video.video_link,
+            artist_name=video.artist_name,
+            artist_id=video.artist_id,
+            thumbnail_url=video.thumbnail_url,
+            created_at=video.created_at,
+            display_order=display_order
+        )
+        videos.append(video_data)
     
     # ========================================================================
     # STEP 4: Build complete artist response
@@ -831,3 +864,193 @@ def get_artist_videos(
     ).all()
     
     return videos
+
+
+
+
+@router.patch("/{artist_id}/admin-reorder-songs", status_code=status.HTTP_200_OK)
+def reorder_artist_songs(
+    artist_id: int,
+    reorder_data: ReorderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reorder songs for a specific artist
+    
+    This endpoint requires authentication (JWT token)
+    
+    Updates the display_order for multiple songs at once
+    
+    Args:
+        artist_id: ID of the artist
+        reorder_data: List of song_id and position pairs
+        db: Database session
+        current_user: Authenticated user (requires auth)
+    
+    Request body example:
+    {
+        "items": [
+            {"id": 45, "position": 1},
+            {"id": 23, "position": 2},
+            {"id": 67, "position": 3}
+        ]
+    }
+    
+    Returns:
+        Success message
+    
+    Raises:
+        HTTPException 404 if artist not found
+        HTTPException 400 if song doesn't belong to this artist
+        HTTPException 500 if update fails
+    """
+    
+    from models.artist_song_order import ArtistSongOrder
+    
+    # Verify artist exists
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    if not artist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Artist with ID {artist_id} not found"
+        )
+    
+    # Verify all songs belong to this artist
+    for item in reorder_data.items:
+        song = db.query(Song).filter(
+            Song.id == item.id,
+            Song.artist_id == artist_id
+        ).first()
+        
+        if not song:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Song with ID {item.id} not found or doesn't belong to artist {artist_id}"
+            )
+    
+    try:
+        # Update all positions
+        for item in reorder_data.items:
+            # Find existing order entry
+            order_entry = db.query(ArtistSongOrder).filter(
+                ArtistSongOrder.artist_id == artist_id,
+                ArtistSongOrder.song_id == item.id
+            ).first()
+            
+            if order_entry:
+                # Update existing entry
+                order_entry.display_order = item.position
+            else:
+                # Create new entry (shouldn't happen but handle it)
+                new_entry = ArtistSongOrder(
+                    artist_id=artist_id,
+                    song_id=item.id,
+                    display_order=item.position
+                )
+                db.add(new_entry)
+        
+        db.commit()
+        
+        return {"message": f"Successfully reordered {len(reorder_data.items)} songs"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reorder songs: {str(e)}"
+        )
+
+
+@router.patch("/{artist_id}/admin-reorder-videos", status_code=status.HTTP_200_OK)
+def reorder_artist_videos(
+    artist_id: int,
+    reorder_data: ReorderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reorder videos for a specific artist
+    
+    This endpoint requires authentication (JWT token)
+    
+    Updates the display_order for multiple videos at once
+    
+    Args:
+        artist_id: ID of the artist
+        reorder_data: List of video_id and position pairs
+        db: Database session
+        current_user: Authenticated user (requires auth)
+    
+    Request body example:
+    {
+        "items": [
+            {"id": 12, "position": 1},
+            {"id": 34, "position": 2},
+            {"id": 56, "position": 3}
+        ]
+    }
+    
+    Returns:
+        Success message
+    
+    Raises:
+        HTTPException 404 if artist not found
+        HTTPException 400 if video doesn't belong to this artist
+        HTTPException 500 if update fails
+    """
+    
+    from models.artist_video_order import ArtistVideoOrder
+    
+    # Verify artist exists
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    if not artist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Artist with ID {artist_id} not found"
+        )
+    
+    # Verify all videos belong to this artist
+    for item in reorder_data.items:
+        video = db.query(Video).filter(
+            Video.id == item.id,
+            Video.artist_id == artist_id
+        ).first()
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Video with ID {item.id} not found or doesn't belong to artist {artist_id}"
+            )
+    
+    try:
+        # Update all positions
+        for item in reorder_data.items:
+            # Find existing order entry
+            order_entry = db.query(ArtistVideoOrder).filter(
+                ArtistVideoOrder.artist_id == artist_id,
+                ArtistVideoOrder.video_id == item.id
+            ).first()
+            
+            if order_entry:
+                # Update existing entry
+                order_entry.display_order = item.position
+            else:
+                # Create new entry (shouldn't happen but handle it)
+                new_entry = ArtistVideoOrder(
+                    artist_id=artist_id,
+                    video_id=item.id,
+                    display_order=item.position
+                )
+                db.add(new_entry)
+        
+        db.commit()
+        
+        return {"message": f"Successfully reordered {len(reorder_data.items)} videos"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reorder videos: {str(e)}"
+        )
