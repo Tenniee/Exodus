@@ -82,7 +82,7 @@ async def add_song(
     # ========================================================================
     
     try:
-        songs_list = json.loads(songs)
+        songs_list = json.loads(song)
         
         if not isinstance(songs_list, list) or len(songs_list) == 0:
             raise ValueError("Songs must be a non-empty array")
