@@ -29,12 +29,12 @@ router = APIRouter(
 # ============================================================================
 @router.post(
     "/admin-add-song",
-    response_model=SongResponse,
+    response_model=list[SongResponse],
     status_code=status.HTTP_201_CREATED
 )
 async def add_song(
-    song: SongCreate = Depends(SongCreate.as_form),
-    cover_art: UploadFile = File(...),
+    songs: str = Form(...),
+    cover_arts: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -82,30 +82,26 @@ async def add_song(
     # ========================================================================
     
     try:
-        songs_list = json.loads(song)
-        
-        if not isinstance(songs_list, list) or len(songs_list) == 0:
+        raw_songs = json.loads(songs)
+
+        if not isinstance(raw_songs, list) or not raw_songs:
             raise ValueError("Songs must be a non-empty array")
-        
-        for idx, song in enumerate(songs_list):
-            if not isinstance(song, dict):
-                raise ValueError(f"Song at index {idx} must be an object")
-            
-            # Check required fields including artist_id
-            required_fields = ["song_name", "artist_name", "linktree", "artist_id"]
-            for field in required_fields:
-                if field not in song or not song[field]:
-                    raise ValueError(f"Song at index {idx} missing required field: {field}")
-            
-            # Validate artist_id is a positive integer
-            if not isinstance(song["artist_id"], int) or song["artist_id"] <= 0:
-                raise ValueError(f"Song at index {idx}: artist_id must be a positive integer")
-        
+
+        songs_list: list[SongCreate] = []
+
+        for idx, song_data in enumerate(raw_songs):
+            try:
+                song_obj = SongCreate(**song_data)
+                songs_list.append(song_obj)
+            except ValidationError as e:
+                raise ValueError(f"Song at index {idx}: {e}")
+
     except (json.JSONDecodeError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid songs format: {str(e)}"
         )
+
     
     # ========================================================================
     # STEP 2: Validate cover arts count matches songs count
@@ -122,7 +118,7 @@ async def add_song(
     # ========================================================================
     
     for idx, song_data in enumerate(songs_list):
-        artist_id = song_data["artist_id"]
+        artist_id = song.artist_id
         
         # Verify the artist exists in the database
         artist = db.query(Artist).filter(Artist.id == artist_id).first()
@@ -142,8 +138,8 @@ async def add_song(
         for idx, (song_data, cover_art) in enumerate(zip(songs_list, cover_arts)):
             cover_url = upload_song_cover_art(
                 cover_art,
-                song_data["song_name"],
-                song_data["artist_name"]
+                song.song_name,
+                song.artist_name
             )
             uploaded_cover_urls.append(cover_url)
         
@@ -165,11 +161,11 @@ async def add_song(
     try:
         for song_data, cover_url in zip(songs_list, uploaded_cover_urls):
             new_song = Song(
-                song_name=song_data["song_name"].strip(),
-                artist_name=song_data["artist_name"].strip(),
-                artist_id=song_data["artist_id"],  # Now required
+                song_name=song.song_name,
+                artist_name=song.artist_name,
+                artist_id=song.artist_id,  # Now required
                 cover_art_url=cover_url,
-                linktree=song_data["linktree"].strip()
+                linktree=song.linktree.strip()
             )
             db.add(new_song)
             created_songs.append(new_song)
