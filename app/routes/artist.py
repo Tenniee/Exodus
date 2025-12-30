@@ -542,8 +542,8 @@ def get_artist_by_id(
         HTTPException 404 if artist not found
     """
     
-    from models.artist_song_order import ArtistSongOrder
-    from models.artist_video_order import ArtistVideoOrder
+    from app.models.artist_song_order import ArtistSongOrder
+    from app.models.artist_video_order import ArtistVideoOrder
     
     # ========================================================================
     # STEP 1: Find the artist
