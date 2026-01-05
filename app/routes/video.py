@@ -13,6 +13,15 @@ from app.models.video import Video
 from app.schemas.video import VideoResponse, VideoCreate
 from app.core.dependencies import get_current_user
 from app.core.cloudinary_config import get_youtube_thumbnail_url
+from sqlalchemy import func
+
+from app.models.database import get_db
+from app.models.video import Video
+from app.models.artist_video_order import ArtistVideoOrder  # Make sure ArtistVideoOrder is imported
+from app.schemas.video import VideoCreate, VideoResponse
+from app.models.user import User
+
+
 import json
 
 # ============================================================================
@@ -30,10 +39,7 @@ router = APIRouter(
 
 @router.post("/admin-add-video", response_model=List[VideoResponse], status_code=status.HTTP_201_CREATED)
 async def add_videos(
-    # JSON string containing array of video objects
-    # Example: '[{"video_name": "Video 1", "video_link": "https://youtube.com/...", "artist_name": "Drake", "artist_id": 5}, {...}]'
-    
-    video: VideoCreate = Depends(VideoCreate.as_form),
+    videos: str = Form(..., description="JSON array of video objects"),  # Changed from VideoCreate
     
     # Dependencies
     db: Session = Depends(get_db),
@@ -49,7 +55,24 @@ async def add_videos(
     For non-YouTube videos, thumbnail_url will be null
     
     If artist_id is provided, it will be verified against the artists table
-    If artist_id is not provided, artist_name will be stored as a string (for features)
+    
+    **videos parameter format (JSON string):**
+```json
+    [
+        {
+            "video_name": "Video Title 1",
+            "video_link": "https://youtube.com/watch?v=...",
+            "artist_name": "Artist Name 1",
+            "artist_id": 1
+        },
+        {
+            "video_name": "Video Title 2",
+            "video_link": "https://youtube.com/watch?v=...",
+            "artist_name": "Artist Name 2",
+            "artist_id": 2
+        }
+    ]
+```
     
     Process:
     1. Parse videos JSON array
@@ -63,7 +86,7 @@ async def add_videos(
                - video_name: Name of the video
                - video_link: URL to the video (YouTube or other platform)
                - artist_name: Name of the artist (always required for display)
-               - artist_id: Optional ID of artist in database (for linking)
+               - artist_id: ID of artist in database
         db: Database session
         current_user: Authenticated user (from JWT token)
     
@@ -76,30 +99,30 @@ async def add_videos(
     """
     
     # Import Artist model for validation
-    from models.artist import Artist
+    from app.models.artist import Artist
     
     # ========================================================================
     # STEP 1: Parse and validate videos JSON
     # ========================================================================
     
     try:
-        videos_list = json.loads(videos)
+        videos_list = json.loads(videos)  # Changed from 'video' to 'videos'
         
         if not isinstance(videos_list, list) or len(videos_list) == 0:
             raise ValueError("Videos must be a non-empty array")
         
-        for idx, video in enumerate(videos_list):
-            if not isinstance(video, dict):
+        for idx, video_data in enumerate(videos_list):  # Changed variable name
+            if not isinstance(video_data, dict):
                 raise ValueError(f"Video at index {idx} must be an object")
             
             # Check required fields including artist_id
             required_fields = ["video_name", "video_link", "artist_name", "artist_id"]
             for field in required_fields:
-                if field not in video or not video[field]:
+                if field not in video_data or not video_data[field]:
                     raise ValueError(f"Video at index {idx} missing required field: {field}")
             
             # Validate artist_id is a positive integer
-            if not isinstance(video["artist_id"], int) or video["artist_id"] <= 0:
+            if not isinstance(video_data["artist_id"], int) or video_data["artist_id"] <= 0:
                 raise ValueError(f"Video at index {idx}: artist_id must be a positive integer")
         
     except (json.JSONDecodeError, ValueError) as e:
@@ -136,7 +159,7 @@ async def add_videos(
             "video_name": video_data["video_name"].strip(),
             "video_link": video_link,
             "artist_name": video_data["artist_name"].strip(),
-            "artist_id": video_data["artist_id"],  # Now required
+            "artist_id": video_data["artist_id"],
             "thumbnail_url": thumbnail_url
         })
     
@@ -152,7 +175,7 @@ async def add_videos(
                 video_name=video_data["video_name"],
                 video_link=video_data["video_link"],
                 artist_name=video_data["artist_name"],
-                artist_id=video_data["artist_id"],  # Now required
+                artist_id=video_data["artist_id"],
                 thumbnail_url=video_data["thumbnail_url"]
             )
             db.add(new_video)
@@ -198,7 +221,6 @@ async def add_videos(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create videos: {str(e)}. All changes have been rolled back."
         )
-
 # ============================================================================
 # EDIT VIDEO ENDPOINT
 # ============================================================================

@@ -11,6 +11,7 @@ from app.models.database import get_db
 from app.models.user import User
 from app.models.song import Song
 from app.schemas.song import SongResponse, SongCreate
+from app.models.artist_song_order import ArtistSongOrder
 from app.core.dependencies import get_current_user
 from app.core.cloudinary_config import upload_song_cover_art, delete_cloudinary_image
 from sqlalchemy import func
@@ -29,12 +30,12 @@ router = APIRouter(
 # ============================================================================
 @router.post(
     "/admin-add-song",
-    response_model=SongResponse,
+    response_model=List[SongResponse],  # Return list
     status_code=status.HTTP_201_CREATED
 )
 async def add_song(
-    song: SongCreate = Depends(SongCreate.as_form),
-    cover_art: UploadFile = File(...),
+    songs: str = Form(...),  # JSON string of song array
+    cover_arts: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -82,7 +83,7 @@ async def add_song(
     # ========================================================================
     
     try:
-        songs_list = json.loads(song)
+        songs_list = json.loads(songs)
         
         if not isinstance(songs_list, list) or len(songs_list) == 0:
             raise ValueError("Songs must be a non-empty array")
