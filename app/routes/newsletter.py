@@ -80,3 +80,14 @@ def subscribe_to_newsletter(subscription_data: NewsletterSubscribe, db: Session 
 # ============================================================================
 # ============================================================================
 # ============================================================================
+
+
+@router.get("/subscriptions", response_model=list[NewsletterSubscriptionResponse])
+def get_subscriptions(db: Session = Depends(get_db)):
+    """
+    Get all newsletter subscriptions
+    
+    Returns:
+        List of all newsletter subscriptions
+    """
+    return db.query(NewsletterSubscription).all()
