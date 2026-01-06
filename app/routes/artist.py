@@ -691,8 +691,8 @@ async def delete_artist(
         HTTPException 500 if deletion fails
     """
     
-    from models.song import Song
-    from models.video import Video
+    from app.models.song import Song
+    from app.models.video import Video
     from core.cloudinary_config import delete_cloudinary_image
     
     # ========================================================================
@@ -781,7 +781,7 @@ def get_artist_songs(
         HTTPException 404 if artist not found
     """
     
-    from models.song import Song
+    from app.models.song import Song
     from sqlalchemy import or_
     
     # ========================================================================
@@ -835,7 +835,7 @@ def get_artist_videos(
         HTTPException 404 if artist not found
     """
     
-    from models.video import Video
+    from app.models.video import Video
     from sqlalchemy import or_
     
     # ========================================================================
@@ -906,7 +906,7 @@ def reorder_artist_songs(
         HTTPException 500 if update fails
     """
     
-    from models.artist_song_order import ArtistSongOrder
+    from app.models.artist_song_order import ArtistSongOrder
     
     # Verify artist exists
     artist = db.query(Artist).filter(Artist.id == artist_id).first()
@@ -1000,7 +1000,7 @@ def reorder_artist_videos(
         HTTPException 500 if update fails
     """
     
-    from models.artist_video_order import ArtistVideoOrder
+    from app.models.artist_video_order import ArtistVideoOrder
     
     # Verify artist exists
     artist = db.query(Artist).filter(Artist.id == artist_id).first()

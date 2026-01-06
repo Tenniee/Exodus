@@ -275,7 +275,7 @@ async def edit_video(
     """
     
     # Import Artist model for validation
-    from models.artist import Artist
+    from app.models.artist import Artist
     
     # ========================================================================
     # STEP 1: Find the video in database

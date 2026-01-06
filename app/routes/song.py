@@ -280,7 +280,7 @@ async def edit_song(
     """
     
     # Import Artist model for validation
-    from models.artist import Artist
+    from app.models.artist import Artist
     
     # ========================================================================
     # STEP 1: Find the song in database
