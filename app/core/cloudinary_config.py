@@ -377,3 +377,51 @@ def upload_user_profile_picture(file: UploadFile, user_id: int) -> str:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload profile picture: {str(e)}"
         )
+
+
+
+
+
+def upload_playlist_cover_art(file: UploadFile, playlist_name: str) -> str:
+    """
+    Uploads a playlist cover art to Cloudinary without cropping
+    Accepts any image size
+    
+    Args:
+        file: The uploaded cover art image file
+        playlist_name: Name of the playlist (used in filename)
+    
+    Returns:
+        Cloudinary URL of the uploaded cover art
+    
+    Raises:
+        HTTPException if upload fails or file format is invalid
+    """
+    # Validate the file format
+    validate_image_file(file)
+    
+    try:
+        # Create a clean filename from playlist name
+        clean_name = playlist_name.replace(' ', '_').replace("'", "").lower()
+        
+        # Upload to Cloudinary without any transformations (keeps original size)
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder="playlists/covers",
+            public_id=f"{clean_name}_cover",
+            overwrite=True  # Replace if image with same name exists
+        )
+        
+        return result["secure_url"]
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload playlist cover art: {str(e)}"
+        )
+
+
+# ============================================================================
+# ============================================================================
+# ============================================================================
+

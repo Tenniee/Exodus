@@ -101,7 +101,7 @@ async def signup(
     # Upload profile picture if provided
     if profile_picture is not None:
         try:
-            from core.cloudinary_config import upload_user_profile_picture
+            from app.core.cloudinary_config import upload_user_profile_picture
             
             # Upload to Cloudinary using the user's ID
             profile_picture_url = upload_user_profile_picture(profile_picture, new_user.id)
@@ -279,7 +279,7 @@ async def edit_profile(
     
     # Update profile picture if provided
     if profile_picture is not None:
-        from core.cloudinary_config import upload_user_profile_picture, delete_cloudinary_image
+        from app.core.cloudinary_config import upload_user_profile_picture, delete_cloudinary_image
         
         # Delete old profile picture from Cloudinary if exists
         if current_user.profile_picture_url:

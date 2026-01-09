@@ -8,6 +8,7 @@ from app.routes.song import router as song_router
 from app.routes.video import router as video_router
 from app.routes.artist_request import router as artist_request_router
 from app.routes.featured_music import router as featured_music_router
+from app.routes.playlist import router as playlist_router
 
 app = FastAPI(
     title="Exodus record Label API",
@@ -52,6 +53,7 @@ app.include_router(song_router)
 app.include_router(video_router)
 app.include_router(artist_request_router)
 app.include_router(featured_music_router)
+app.include_router(playlist_router)
 
 
 

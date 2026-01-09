@@ -389,7 +389,7 @@ async def delete_song(
         HTTPException 500 if deletion fails
     """
     
-    from core.cloudinary_config import delete_cloudinary_image
+    from app.core.cloudinary_config import delete_cloudinary_image
     
     # Find the song
     song = db.query(Song).filter(Song.id == song_id).first()
