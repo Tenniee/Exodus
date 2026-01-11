@@ -399,3 +399,37 @@ async def delete_video(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete video: {str(e)}"
         )
+
+
+
+
+@router.get("/{video_id}", response_model=VideoResponse)
+def get_video_by_id(
+    video_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a single video by ID
+    
+    Public endpoint - no authentication required
+    
+    Args:
+        video_id: ID of the video
+        db: Database session
+    
+    Returns:
+        Video details
+    
+    Raises:
+        HTTPException 404 if video not found
+    """
+    
+    video = db.query(Video).filter(Video.id == video_id).first()
+    
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video with ID {video_id} not found"
+        )
+    
+    return video

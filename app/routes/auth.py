@@ -6,12 +6,17 @@ Handles user signup, login, and current user retrieval
 from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File
 from typing import Optional
 from sqlalchemy.orm import Session
+from pydantic import EmailStr
+from datetime import datetime, timedelta
 from app.models.database import get_db
 from app.models.user import User
 from app.schemas.user import UserSignup, UserLogin, Token, UserResponse
 from app.core.security import hash_password, verify_password, create_access_token
 from app.core.dependencies import get_current_user
-from pydantic import EmailStr
+from app.models.password_reset_token import PasswordResetToken
+from app.core.email import send_password_reset_email, generate_otp
+from app.schemas.user import ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest
+
 
 # ============================================================================
 # ROUTER SETUP
@@ -301,4 +306,232 @@ async def edit_profile(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update profile: {str(e)}"
+        )
+
+
+
+
+# ============================================================================
+# FORGOT PASSWORD ENDPOINT
+# ============================================================================
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+def forgot_password(
+    request_data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Request password reset (Step 1)
+    
+    Sends an email with OTP to the user's email address
+    No authentication required
+    
+    Process:
+    1. Check if user with email exists
+    2. Generate 6-digit OTP
+    3. Store OTP in database with 30-minute expiry
+    4. Send email with reset link containing OTP
+    5. Return success message
+    
+    Args:
+        request_data: Email address
+        db: Database session
+    
+    Returns:
+        Success message
+    
+    Raises:
+        HTTPException 404 if user not found
+        HTTPException 500 if email sending fails
+    """
+    
+    # Check if user exists
+    user = db.query(User).filter(User.email == request_data.email.lower()).first()
+    
+    if not user:
+        # Security: Don't reveal if email exists or not
+        # Return success anyway to prevent email enumeration
+        return {"message": "If an account exists with this email, a password reset link has been sent"}
+    
+    # Generate OTP
+    otp = generate_otp()
+    
+    # Invalidate any existing OTPs for this email
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.email == request_data.email.lower(),
+        PasswordResetToken.used == False
+    ).update({"used": True})
+    
+    # Create new OTP entry
+    reset_token = PasswordResetToken(
+        email=request_data.email.lower(),
+        otp=otp,
+        used=False
+    )
+    
+    db.add(reset_token)
+    db.commit()
+    
+    # Send email
+    try:
+        send_password_reset_email(request_data.email, otp)
+        
+        return {"message": "If an account exists with this email, a password reset link has been sent"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send password reset email"
+        )
+
+
+# ============================================================================
+# RESET PASSWORD ENDPOINT
+# ============================================================================
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+def reset_password(
+    request_data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Reset password using OTP (Step 2)
+    
+    Validates OTP and updates user's password
+    No authentication required
+    
+    Process:
+    1. Find OTP in database
+    2. Validate OTP (not used, not expired, matches email)
+    3. Update user's password
+    4. Mark OTP as used
+    5. Return success message
+    
+    Args:
+        request_data: Email, OTP, and new password
+        db: Database session
+    
+    Returns:
+        Success message
+    
+    Raises:
+        HTTPException 400 if OTP is invalid/expired
+        HTTPException 404 if user not found
+    """
+    
+    # Find the OTP
+    reset_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.email == request_data.email.lower(),
+        PasswordResetToken.otp == request_data.otp,
+        PasswordResetToken.used == False
+    ).first()
+    
+    if not reset_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP"
+        )
+    
+    # Check if OTP is expired (30 minutes)
+    expiry_time = reset_token.created_at + timedelta(minutes=30)
+    if datetime.utcnow() > expiry_time:
+        # Mark as used so it can't be reused
+        reset_token.used = True
+        db.commit()
+        
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP has expired. Please request a new one"
+        )
+    
+    # Find the user
+    user = db.query(User).filter(User.email == request_data.email.lower()).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Update password
+    user.hashed_password = hash_password(request_data.new_password)
+    
+    # Mark OTP as used
+    reset_token.used = True
+    
+    # Commit changes
+    try:
+        db.commit()
+        
+        return {"message": "Password successfully reset"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset password: {str(e)}"
+        )
+
+
+# ============================================================================
+# CHANGE PASSWORD ENDPOINT (AUTHENTICATED)
+# ============================================================================
+
+@router.patch("/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    request_data: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Change password (for logged-in users)
+    
+    This endpoint requires authentication (JWT token)
+    User must provide current password to confirm identity
+    
+    Process:
+    1. Verify current password is correct
+    2. Update to new password
+    3. Return success message
+    
+    Args:
+        request_data: Current password and new password
+        db: Database session
+        current_user: Authenticated user (from JWT token)
+    
+    Returns:
+        Success message
+    
+    Raises:
+        HTTPException 400 if current password is incorrect
+    """
+    
+    # Verify current password
+    if not verify_password(request_data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    
+    # Check if new password is same as current (optional validation)
+    if verify_password(request_data.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password"
+        )
+    
+    # Update password
+    current_user.hashed_password = hash_password(request_data.new_password)
+    
+    try:
+        db.commit()
+        
+        return {"message": "Password successfully changed"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to change password: {str(e)}"
         )

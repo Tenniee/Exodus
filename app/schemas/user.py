@@ -64,6 +64,22 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Schema for forgot password request"""
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    """Schema for reset password request"""
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=1)
+
+class ChangePasswordRequest(BaseModel):
+    """Schema for change password request"""
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=1)
+
+
 # ============================================================================
 # ============================================================================
 # ============================================================================

@@ -16,7 +16,6 @@ load_dotenv()
 # For PostgreSQL:
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-print("DATABASE_URL seen by app:", repr(DATABASE_URL))
 
 
 # ============================================================================
@@ -82,6 +81,8 @@ def init_db():
     from app.models.artist_song_order import ArtistSongOrder  # noqa
     from app.models.artist_video_order import ArtistVideoOrder  # noqa
     from app.models.featured_music import FeaturedMusic  # noqa
+    from app.models.password_reset_token import PasswordResetToken
+    from app.models.playlist import Playlist
 
     # Create all tables
     Base.metadata.create_all(bind=engine)

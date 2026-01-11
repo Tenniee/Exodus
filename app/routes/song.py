@@ -416,3 +416,35 @@ async def delete_song(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete song: {str(e)}"
         )
+
+
+@router.get("/{song_id}", response_model=SongResponse)
+def get_song_by_id(
+    song_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a single song by ID
+    
+    Public endpoint - no authentication required
+    
+    Args:
+        song_id: ID of the song
+        db: Database session
+    
+    Returns:
+        Song details
+    
+    Raises:
+        HTTPException 404 if song not found
+    """
+    
+    song = db.query(Song).filter(Song.id == song_id).first()
+    
+    if not song:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Song with ID {song_id} not found"
+        )
+    
+    return song
