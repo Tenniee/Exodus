@@ -90,9 +90,9 @@ def upload_artist_banner(file: UploadFile, artist_name: str) -> str:
             public_id=f"{artist_name.replace(' ', '_').lower()}_banner",
             transformation=[
                 {
-                    "width": 1200,
-                    "height": 400,
-                    "crop": "fill",
+                    #"width": 1200,
+                    #"height": 400,
+                    #"crop": "fill",
                     "gravity": "auto"
                 }
             ],
