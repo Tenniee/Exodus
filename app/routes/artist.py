@@ -324,7 +324,7 @@ async def edit_artist(
     # ========================================================================
     
     # Import the delete function
-    from core.cloudinary_config import delete_cloudinary_image
+    from app.core.cloudinary_config import delete_cloudinary_image
     
     # Update banner image if new one is provided
     if banner_image is not None:
@@ -693,7 +693,7 @@ async def delete_artist(
     
     from app.models.song import Song
     from app.models.video import Video
-    from core.cloudinary_config import delete_cloudinary_image
+    from app.core.cloudinary_config import delete_cloudinary_image
     
     # ========================================================================
     # STEP 1: Find the artist
