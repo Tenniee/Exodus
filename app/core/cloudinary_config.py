@@ -402,7 +402,21 @@ def upload_playlist_cover_art(file: UploadFile, playlist_name: str) -> str:
     
     try:
         # Create a clean filename from playlist name
-        clean_name = playlist_name.replace(' ', '_').replace("'", "").lower()
+        # Remove all special characters that Cloudinary doesn't allow
+        import re
+        
+        # Replace spaces with underscores
+        clean_name = playlist_name.replace(' ', '_')
+        
+        # Remove all characters except alphanumeric, underscore, and hyphen
+        clean_name = re.sub(r'[^a-zA-Z0-9_-]', '', clean_name)
+        
+        # Convert to lowercase
+        clean_name = clean_name.lower()
+        
+        # If name is empty after sanitization, use a default
+        if not clean_name:
+            clean_name = "playlist"
         
         # Upload to Cloudinary without any transformations (keeps original size)
         result = cloudinary.uploader.upload(
