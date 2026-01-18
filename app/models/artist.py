@@ -42,6 +42,8 @@ class Artist(Base):
     instagram_link = Column(String(500), nullable=True)
     x_link = Column(String(500), nullable=True)
     tiktok_link = Column(String(500), nullable=True)
+
+    display_order = Column(Integer, nullable=False, index=True)
     
     # Timestamp when the artist was added
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

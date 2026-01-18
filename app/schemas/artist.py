@@ -41,7 +41,7 @@ class ArtistResponse(BaseModel):
     artist_name: str
     banner_image_url: str
     image_url: str
-    genres: List[str]  # Will be converted from comma-separated string
+    genres: List[str]
     
     # Optional links
     spotify_link: Optional[str]
@@ -52,10 +52,12 @@ class ArtistResponse(BaseModel):
     x_link: Optional[str]
     tiktok_link: Optional[str]
     
+    display_order: int  # NEW FIELD
     created_at: datetime
     
     class Config:
         from_attributes = True
+
 
 
 class ArtistWithSongsResponse(BaseModel):
@@ -77,6 +79,7 @@ class ArtistWithSongsResponse(BaseModel):
     x_link: Optional[str]
     tiktok_link: Optional[str]
     
+    display_order: int  # NEW FIELD
     created_at: datetime
     
     # Songs by this artist
@@ -124,6 +127,7 @@ class ArtistDetailResponse(BaseModel):
     x_link: Optional[str]
     tiktok_link: Optional[str]
     
+    display_order: int  # NEW FIELD
     created_at: datetime
     
     # All songs by this artist (with ordering)
@@ -134,6 +138,14 @@ class ArtistDetailResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class ArtistReorderRequest(BaseModel):
+    """Schema for reordering all artists"""
+    items: List[ItemOrder]  # ItemOrder is from previous reorder schemas
+
+
+
 
 
 class ItemOrder(BaseModel):

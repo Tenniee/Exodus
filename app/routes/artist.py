@@ -126,6 +126,15 @@ async def add_artist(
     
     # Upload profile image (square: 800x800)
     profile_url = upload_artist_image(profile_image, artist_name)
+
+    # ========================================================================
+    #Get the current max display_order and increment
+    # ========================================================================
+    
+    from sqlalchemy import func
+    
+    max_order = db.query(func.max(Artist.display_order)).scalar()
+    next_order = 1 if max_order is None else max_order + 1
     
     # ========================================================================
     # STEP 3: Create artist record in database
@@ -145,6 +154,7 @@ async def add_artist(
             instagram_link=instagram_link.strip() if instagram_link else None,
             x_link=x_link.strip() if x_link else None,
             tiktok_link=tiktok_link.strip() if tiktok_link else None
+            display_order=next_order
         )
         
         # Add to database session
@@ -491,6 +501,7 @@ def get_all_artists(
             instagram_link=artist.instagram_link,
             x_link=artist.x_link,
             tiktok_link=artist.tiktok_link,
+            display_order=artist.display_order,
             created_at=artist.created_at,
             songs=songs
         )
@@ -644,6 +655,71 @@ def get_artist_by_id(
         songs=songs,
         videos=videos
     )
+
+
+
+@router.patch("/admin-reorder-all", status_code=status.HTTP_200_OK)
+def reorder_all_artists(
+    reorder_data: ArtistReorderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reorder all artists globally
+    
+    This endpoint requires authentication (JWT token)
+    
+    Updates the display_order for multiple artists at once
+    This affects the order in which artists appear in GET /artists/
+    
+    Args:
+        reorder_data: List of artist_id and position pairs
+        db: Database session
+        current_user: Authenticated user (requires auth)
+    
+    Request body example:
+    {
+        "items": [
+            {"id": 5, "position": 1},
+            {"id": 3, "position": 2},
+            {"id": 8, "position": 3}
+        ]
+    }
+    
+    Returns:
+        Success message
+    
+    Raises:
+        HTTPException 404 if artist not found
+        HTTPException 500 if update fails
+    """
+    
+    # Verify all artists exist
+    for item in reorder_data.items:
+        artist = db.query(Artist).filter(Artist.id == item.id).first()
+        
+        if not artist:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Artist with ID {item.id} not found"
+            )
+    
+    try:
+        # Update all display_order values
+        for item in reorder_data.items:
+            artist = db.query(Artist).filter(Artist.id == item.id).first()
+            artist.display_order = item.position
+        
+        db.commit()
+        
+        return {"message": f"Successfully reordered {len(reorder_data.items)} artists"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reorder artists: {str(e)}"
+        )
 
 
 
