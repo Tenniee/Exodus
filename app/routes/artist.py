@@ -153,7 +153,7 @@ async def add_artist(
             youtube_music_link=youtube_music_link.strip() if youtube_music_link else None,
             instagram_link=instagram_link.strip() if instagram_link else None,
             x_link=x_link.strip() if x_link else None,
-            tiktok_link=tiktok_link.strip() if tiktok_link else None
+            tiktok_link=tiktok_link.strip() if tiktok_link else None,
             display_order=next_order
         )
         
