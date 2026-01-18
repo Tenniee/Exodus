@@ -14,7 +14,7 @@ from app.core.dependencies import get_current_user
 from app.core.cloudinary_config import upload_artist_banner, upload_artist_image
 import json
 
-from app.schemas.artist import ArtistListResponse, ArtistDetailResponse, ArtistWithSongsResponse, PaginationMeta, ReorderRequest, ItemOrder, ItemOrder
+from app.schemas.artist import ArtistListResponse, ArtistDetailResponse, ArtistWithSongsResponse, PaginationMeta, ReorderRequest, ItemOrder, ItemOrder, ArtistReorderRequest
 from app.models.song import Song
 from app.models.video import Video
 from sqlalchemy import or_

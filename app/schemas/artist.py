@@ -140,11 +140,6 @@ class ArtistDetailResponse(BaseModel):
         from_attributes = True
 
 
-class ArtistReorderRequest(BaseModel):
-    """Schema for reordering all artists"""
-    items: List[ItemOrder]  # ItemOrder is from previous reorder schemas
-
-
 
 
 
@@ -156,6 +151,12 @@ class ItemOrder(BaseModel):
 class ReorderRequest(BaseModel):
     """Schema for reordering items"""
     items: List[ItemOrder]
+
+class ArtistReorderRequest(BaseModel):
+    """Schema for reordering all artists"""
+    items: List[ItemOrder]  # ItemOrder is from previous reorder schemas
+
+
 
 
 # ============================================================================
