@@ -715,9 +715,35 @@ def reorder_all_artists(
         # Update all display_order values
         for item in reorder_data.items:
             artist = db.query(Artist).filter(Artist.id == item.id).first()
-            artist.display_order = item.position
-        
+            old_pos = artist.display_order
+            new_pos = item.position
+
+            if old_pos == new_pos:
+                continue
+
+            if new_pos < old_pos:
+                # moving UP
+                db.query(Artist).filter(
+                    Artist.display_order >= new_pos,
+                    Artist.display_order < old_pos
+                ).update(
+                    {Artist.display_order: Artist.display_order + 1},
+                    synchronize_session=False
+                )
+            else:
+                # moving DOWN
+                db.query(Artist).filter(
+                    Artist.display_order > old_pos,
+                    Artist.display_order <= new_pos
+                ).update(
+                    {Artist.display_order: Artist.display_order - 1},
+                    synchronize_session=False
+                )
+
+            artist.display_order = new_pos
+
         db.commit()
+
         
         return {"message": f"Successfully reordered {len(reorder_data.items)} artists"}
         
