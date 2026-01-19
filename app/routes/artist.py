@@ -650,6 +650,7 @@ def get_artist_by_id(
         youtube_music_link=artist.youtube_music_link,
         instagram_link=artist.instagram_link,
         x_link=artist.x_link,
+        display_order=artist.display_order,
         tiktok_link=artist.tiktok_link,
         created_at=artist.created_at,
         songs=songs,
