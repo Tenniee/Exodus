@@ -469,7 +469,13 @@ def get_all_artists(
     # ========================================================================
     
     offset = (page - 1) * per_page
-    artists = db.query(Artist).offset(offset).limit(per_page).all()
+    artists = (
+        db.query(Artist)
+        .order_by(Artist.display_order.asc())
+        .offset(offset)
+        .limit(per_page)
+        .all()
+    )
     
     # ========================================================================
     # STEP 3: For each artist, fetch their songs
